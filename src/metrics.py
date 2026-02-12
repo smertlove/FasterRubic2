@@ -3,6 +3,8 @@ import time
 from jiwer import cer
 import numpy as np
 
+import pandas as pd
+
 import pymorphy3 as pm
 from functools import lru_cache
 
@@ -96,11 +98,8 @@ def _get_freq_class(rank: str):
     return "10001-n"
 
 
-def _add_freq_class(df, filter_irrelevant_=True):
+def _add_freq_class(df):
     df_copy = df.copy()
-
-    if filter_irrelevant_:
-        df_copy = filter_irrelevant(df_copy)
 
     df_copy["freq_class"] = df_copy["freq_rank"].map(_get_freq_class)
 
@@ -117,19 +116,59 @@ def _add_freq_class(df, filter_irrelevant_=True):
     # return freq_dfs
 
 
-def lacc_cer_by_freq_classes(
+def _get_freq_df(
     predict_function,
     df,
     filter_irrelevant_=True,
 ):
 
-    freq_df = _add_freq_class(df, filter_irrelevant_=filter_irrelevant_)
+    df_copy = df.copy()
+    if filter_irrelevant_:
+        df_copy = filter_irrelevant(df_copy)
+
+    freq_df = _add_freq_class(df_copy)
 
     inputs, targets = prep_inpts_targets(freq_df)
     preds = predict_function(inputs)
+
+    freq_df["target"] = targets
+    freq_df["pred"] = preds
 
     freq_df["lAcc"] = _lemmatization_accuracy(targets, preds)
     freq_df["lAcc (norm)"] = _lemmatization_accuracy(targets, preds, normalize=True)
     freq_df["CER"] = _lemmatization_cer(targets, preds)
 
     return freq_df
+
+
+def lacc_cer_by_freq_classes(
+    predict_function,
+    df,
+    filter_irrelevant_=True,
+):
+    freq_df = _get_freq_df(
+        predict_function,
+        df,
+        filter_irrelevant_,
+    )
+
+    freq_groups = {
+        "1-100": freq_df[freq_df["freq_class"] == "1-100"],
+        "101-1000": freq_df[freq_df["freq_class"] == "101-1000"],
+        "1001-10000": freq_df[freq_df["freq_class"] == "1001-10000"],
+        "10001-n": freq_df[freq_df["freq_class"] == "10001-n"],
+        "all": freq_df,
+    }
+
+    metrics = []
+
+    for name, group in freq_groups.items():
+        metrics.append({
+            "class": name,
+            "lAcc": group["lAcc"].mean(),
+            "lAcc (norm)": group["lAcc (norm)"].mean(),
+            "CER (total)": group["CER"].mean(),
+            "CER (errors)": group[group["pred"] != group["target"]]["CER"].mean(),
+        })
+
+    return pd.DataFrame(metrics)
