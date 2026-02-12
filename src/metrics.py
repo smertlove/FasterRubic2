@@ -18,14 +18,20 @@ class _Lemmatizer:
         return cls.morph.parse(word)[0].normal_form
 
 
-def _preproc(word: str, normalize=False):
-
+def __preproc(word: str, normalize=False):
     result = word.lower().replace("ё", "е")
 
     if normalize:
         result = _Lemmatizer.lemmatize(result)
 
     return result
+
+def _preproc(word: str | list[str], normalize=False):
+
+    if isinstance(word, str):
+        return __preproc(word, normalize=normalize)
+    else:
+        return [__preproc(w, normalize=normalize) for w in word]
 
 
 def _lemmatization_accuracy(targets: list[str], preds: list[str], normalize=False) -> list[int]:
@@ -51,10 +57,8 @@ def _lemmatization_cer(targets: list[str], preds: list[str]) -> list[float]:
 
     cers = [
         cer(
-            target,
-            pred,
-            reference_transform=_preproc,
-            hypothesis_transform=_preproc,
+            _preproc(target),
+            _preproc(pred),
         )
         for target, pred in zip(targets, preds)
     ]
