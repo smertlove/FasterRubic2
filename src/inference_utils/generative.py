@@ -1,7 +1,12 @@
 from tqdm import tqdm
-from transformers import BartForConditionalGeneration, PreTrainedTokenizer, AutoTokenizer
+from transformers import (
+    BartForConditionalGeneration,
+    PreTrainedTokenizer,
+    AutoTokenizer,
+)
 import torch
 from pathlib import Path
+
 
 class GenerativeModel:
 
@@ -15,7 +20,9 @@ class GenerativeModel:
         self.device = device
 
         if isinstance(model, str) or isinstance(model, Path):
-            self.model = BartForConditionalGeneration.from_pretrained(model).to(self.device)
+            self.model = BartForConditionalGeneration.from_pretrained(model).to(
+                self.device
+            )
         else:
             self.model = model.to(self.device)
 
@@ -42,7 +49,7 @@ class GenerativeModel:
             device=self.device,
             max_length=max_length,
             batch_size=batch_size,
-            verbose=self.verbose
+            verbose=self.verbose,
         )
 
 
@@ -61,20 +68,16 @@ def predict(
     if verbose:
         pbar = tqdm(
             range(0, len(texts), batch_size),
-            total=int(len(texts)/batch_size),
+            total=int(len(texts) / batch_size),
         )
     else:
         pbar = range(0, len(texts), batch_size)
 
     for i in pbar:
-        batch = texts[i:i + batch_size]
+        batch = texts[i : i + batch_size]
 
         inputs = tokenizer(
-            batch,
-            max_length=70,
-            truncation=True,
-            padding=True,
-            return_tensors="pt"
+            batch, max_length=70, truncation=True, padding=True, return_tensors="pt"
         ).to(device)
 
         with torch.no_grad():
@@ -87,12 +90,9 @@ def predict(
             )
 
         cur_preds = tokenizer.batch_decode(
-            outputs,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=True
+            outputs, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )
 
         preds.extend(cur_preds)
 
     return preds
-

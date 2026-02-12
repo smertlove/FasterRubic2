@@ -26,11 +26,7 @@ def __preproc(word: str, normalize=False):
     return result
 
 
-def lemmatization_accuracy(
-    targets: list[str],
-    preds: list[str],
-    normalize=False
-):
+def lemmatization_accuracy(targets: list[str], preds: list[str], normalize=False):
 
     assert len(targets) == len(preds)
 
@@ -38,8 +34,10 @@ def lemmatization_accuracy(
     tot = len(targets)
 
     for target, pred in zip(targets, preds):
-        
-        matches += __preproc(target, normalize=normalize) == __preproc(pred, normalize=normalize)
+
+        matches += __preproc(target, normalize=normalize) == __preproc(
+            pred, normalize=normalize
+        )
 
     return matches / tot
 
@@ -51,15 +49,13 @@ def lemmatization_cer(targets: list[str], preds: list[str]):
     cers = []
 
     for target, pred in zip(targets, preds):
-        
+
         preproc_target = __preproc(target)
-        preproc_pred   = __preproc(pred)
+        preproc_pred = __preproc(pred)
 
         if preproc_target != preproc_pred:
 
-            cers.append(
-                cer(preproc_target, preproc_pred)
-            )
+            cers.append(cer(preproc_target, preproc_pred))
 
     return np.mean(cers)
 
@@ -120,10 +116,7 @@ def _get_freq_dfs(df, filter_irrelevant_=True):
 
 
 def lacc_cer_by_freq_classes(
-    predict_function,
-    df,
-    filter_irrelevant_=True,
-    return_preds=False
+    predict_function, df, filter_irrelevant_=True, return_preds=False
 ):
 
     freq_dfs = _get_freq_dfs(df, filter_irrelevant_=filter_irrelevant_)
@@ -153,5 +146,3 @@ def lacc_cer_by_freq_classes(
         return result, result_preds, result_targets
 
     return result
-
-

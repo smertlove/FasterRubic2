@@ -3,10 +3,10 @@ import pandas as pd
 
 def filter_irrelevant(df):
     df_filtered = df[
-        ~df["feats"].str.contains("Typo", na=False) &
-        ~df["feats"].str.contains("Abbr", na=False) &
-        ~df["feats"].str.contains("Anom", na=False) &
-        ~df["feats"].str.contains("SYM" , na=False)
+        ~df["feats"].str.contains("Typo", na=False)
+        & ~df["feats"].str.contains("Abbr", na=False)
+        & ~df["feats"].str.contains("Anom", na=False)
+        & ~df["feats"].str.contains("SYM", na=False)
     ]
     return df_filtered
 
@@ -24,12 +24,7 @@ def prune_frequent_samples(df, min_=50):
 
         else:
 
-            result.append(
-                group.sample(
-                    n=min_,
-                    random_state=42
-                )
-            )
+            result.append(group.sample(n=min_, random_state=42))
 
     df_fixed = pd.concat(result, ignore_index=True)
 
@@ -38,19 +33,14 @@ def prune_frequent_samples(df, min_=50):
 
 def get_sample_from_row_original(row):
     """
-        Сампл для оригинальной модели
+    Сампл для оригинальной модели
     """
-    form  = row["form"]
-    pos   = row["pos"]
+    form = row["form"]
+    pos = row["pos"]
     feats = row["feats"]
     lemma = row["lemma"]
 
-    sample = " ".join(
-        filter(
-            lambda elem: pd.notna(elem),
-            [form, pos, feats]
-        )
-    )
+    sample = " ".join(filter(lambda elem: pd.notna(elem), [form, pos, feats]))
 
     return sample, lemma
 
