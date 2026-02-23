@@ -1,7 +1,6 @@
 from transformers.models.bart.modeling_bart import (
     BartAttention,
     BartModel,
-    BartEncoderLayer,
     BartConfig,
     BartForConditionalGeneration,
 )
@@ -102,7 +101,7 @@ class PrunableBartModel(BartModel):
                 self.decoder.layers[layer_id].encoder_attn.prune_heads(heads)
 
     # NOTE: у Барта нет отдельного фид форвард слоя, поэтому приходится делать вот так
-    def _prune_ffn_layer(self, bart_layer: BartEncoderLayer, neuron_indices):
+    def _prune_ffn_layer(self, bart_layer, neuron_indices):
 
         if len(neuron_indices) == 0:
             return
