@@ -1,6 +1,7 @@
 from transformers.models.bart.modeling_bart import (
     BartAttention,
     BartModel,
+    BartEncoderLayer,
     BartConfig,
     BartForConditionalGeneration,
 )
@@ -9,9 +10,6 @@ from transformers.pytorch_utils import (
     find_pruneable_heads_and_indices,
 )
 import torch
-from torch import nn
-
-from typing import Optional, Tuple
 
 
 class PrunableBartAttention(BartAttention):
@@ -44,128 +42,6 @@ class PrunableBartAttention(BartAttention):
         self.pruned_heads = self.pruned_heads.union(heads)
 
         self.head_size = self.attention_head_size
-
-    # # HACK: это некрасиво, но варианта сделать иначе нет.
-    # #       это полная копия форварда из оригинального BartAttention но с измененным решейпом в конце
-    # def forward(
-    #     self,
-    #     hidden_states: torch.Tensor,
-    #     key_value_states: Optional[torch.Tensor] = None,
-    #     past_key_value: Optional[Tuple[torch.Tensor]] = None,
-    #     attention_mask: Optional[torch.Tensor] = None,
-    #     layer_head_mask: Optional[torch.Tensor] = None,
-    #     output_attentions: bool = False,
-    # ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-    #     """Input shape: Batch x Time x Channel"""
-
-    #     # if key_value_states are provided this layer is used as a cross-attention layer
-    #     # for the decoder
-    #     is_cross_attention = key_value_states is not None
-
-    #     bsz, tgt_len, _ = hidden_states.size()
-
-    #     # get query proj
-    #     query_states = self.q_proj(hidden_states) * self.scaling
-    #     # get key, value proj
-    #     # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-    #     # is checking that the `sequence_length` of the `past_key_value` is the same as
-    #     # the provided `key_value_states` to support prefix tuning
-    #     if (
-    #         is_cross_attention
-    #         and past_key_value is not None
-    #         and past_key_value[0].shape[2] == key_value_states.shape[1]
-    #     ):
-    #         # reuse k,v, cross_attentions
-    #         key_states = past_key_value[0]
-    #         value_states = past_key_value[1]
-    #     elif is_cross_attention:
-    #         # cross_attentions
-    #         key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-    #         value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-    #     elif past_key_value is not None:
-    #         # reuse k, v, self_attention
-    #         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-    #         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-    #         key_states = torch.cat([past_key_value[0], key_states], dim=2)
-    #         value_states = torch.cat([past_key_value[1], value_states], dim=2)
-    #     else:
-    #         # self_attention
-    #         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-    #         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-    #     if self.is_decoder:
-    #         # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-    #         # Further calls to cross_attention layer can then reuse all cross-attention
-    #         # key/value_states (first "if" case)
-    #         # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-    #         # all previous decoder key/value_states. Further calls to uni-directional self-attention
-    #         # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-    #         # if encoder bi-directional self-attention `past_key_value` is always `None`
-    #         past_key_value = (key_states, value_states)
-
-    #     proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-    #     query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-    #     key_states = key_states.reshape(*proj_shape)
-    #     value_states = value_states.reshape(*proj_shape)
-
-    #     src_len = key_states.size(1)
-    #     attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-    #     if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-    #         raise ValueError(
-    #             f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-    #             f" {attn_weights.size()}"
-    #         )
-
-    #     if attention_mask is not None:
-    #         if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-    #             raise ValueError(
-    #                 f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-    #             )
-    #         attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-    #         attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-    #     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-    #     if layer_head_mask is not None:
-    #         if layer_head_mask.size() != (self.num_heads,):
-    #             raise ValueError(
-    #                 f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-    #                 f" {layer_head_mask.size()}"
-    #             )
-    #         attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-    #         attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-    #     if output_attentions:
-    #         # this operation is a bit awkward, but it's required to
-    #         # make sure that attn_weights keeps its gradient.
-    #         # In order to do so, attn_weights have to be reshaped
-    #         # twice and have to be reused in the following
-    #         attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-    #         attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-    #     else:
-    #         attn_weights_reshaped = None
-
-    #     attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-    #     attn_output = torch.bmm(attn_probs, value_states)
-
-    #     if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-    #         raise ValueError(
-    #             f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
-    #             f" {attn_output.size()}"
-    #         )
-
-    #     attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-    #     attn_output = attn_output.transpose(1, 2)
-
-    #     # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-    #     # partitioned across GPUs when using tensor-parallelism.
-    #     attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)  # <- !! Изменено тут !!
-
-    #     attn_output = self.out_proj(attn_output)
-
-    #     return attn_output, attn_weights_reshaped, past_key_value
 
 
 class PrunableBartModel(BartModel):
@@ -225,6 +101,51 @@ class PrunableBartModel(BartModel):
             if self.decoder.layers[layer_id].encoder_attn is not None:
                 self.decoder.layers[layer_id].encoder_attn.prune_heads(heads)
 
+    # NOTE: у Барта нет отдельного фид форвард слоя, поэтому приходится делать вот так
+    def _prune_ffn_layer(self, bart_layer: BartEncoderLayer, neuron_indices):
+
+        if len(neuron_indices) == 0:
+            return
+
+        current_size = bart_layer.fc1.out_features
+
+        keep_indices = [i for i in range(current_size) if i not in neuron_indices]
+
+        keep_indices = torch.tensor(
+            keep_indices,
+            dtype=torch.long,
+            device=bart_layer.fc1.weight.device
+        )
+
+        bart_layer.fc1 = prune_linear_layer(bart_layer.fc1, keep_indices, dim=0)
+        bart_layer.fc2 = prune_linear_layer(bart_layer.fc2, keep_indices, dim=1)
+
+
+    def _prune_ffn(self, neurons_to_prune):
+
+        assert (
+            len(
+                set(neurons_to_prune)
+                - {"encoder_neurons", "decoder_neurons",}
+            )
+            == 0
+        )
+
+        encoder_neurons_to_prune = neurons_to_prune.get("encoder_neurons", dict())
+        decoder_neurons_to_prune = neurons_to_prune.get("decoder_neurons", dict())
+
+        for layer_id, neurons in encoder_neurons_to_prune.items():
+            self._prune_ffn_layer(
+                self.encoder.layers[layer_id],
+                neurons,
+            )
+
+        for layer_id, neurons in decoder_neurons_to_prune.items():
+            self._prune_ffn_layer(
+                self.decoder.layers[layer_id],
+                neurons,
+            )
+
 
 class PrunableBartForConditionalGeneration(BartForConditionalGeneration):
 
@@ -232,5 +153,8 @@ class PrunableBartForConditionalGeneration(BartForConditionalGeneration):
         super().__init__(config)
         self.model = PrunableBartModel(config)
 
-    def _prune_heads(self, heads_to_prune):
+    def prune_heads(self, heads_to_prune):
         self.model._prune_heads(heads_to_prune)
+
+    def prune_ffn(self, neurons_to_prune):
+        self.model._prune_ffn(neurons_to_prune)
