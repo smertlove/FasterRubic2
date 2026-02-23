@@ -51,6 +51,11 @@ def _lemmatization_accuracy(targets: list[str], preds: list[str], normalize=Fals
     return accs
 
 
+def lemmatization_accuracy(targets: list[str], preds: list[str], normalize=False):
+    accs = _lemmatization_accuracy(targets, preds, normalize=normalize)
+    return np.mean(accs)
+
+
 def _lemmatization_cer(targets: list[str], preds: list[str]) -> list[float]:
 
     assert len(targets) == len(preds)
