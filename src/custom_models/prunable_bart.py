@@ -9,6 +9,7 @@ from transformers.pytorch_utils import (
     find_pruneable_heads_and_indices,
 )
 import torch
+import pathlib
 
 
 class PrunableBartAttention(BartAttention):
@@ -157,3 +158,13 @@ class PrunableBartForConditionalGeneration(BartForConditionalGeneration):
 
     def prune_ffn(self, neurons_to_prune):
         self.model._prune_ffn(neurons_to_prune)
+
+
+def load_model(path: pathlib.Path):
+    return torch.load(path / "model.pt", weights_only=False)
+
+
+def save_model(model, path: pathlib.Path):
+    if not path.exists():
+        path.mkdir()
+    return torch.save(model, path / "model.pt")
