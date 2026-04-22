@@ -1,11 +1,11 @@
 from transformers import PreTrainedModel
 from transformers import PreTrainedTokenizer
 
+from cachetools import LRUCache
+
 from tqdm import tqdm
 import math
 import torch
-
-from typing import Iterable
 
 
 class GenerativeModel:
@@ -62,7 +62,7 @@ class GenerativeModel:
         preds = []
 
         if verbose:
-            pbar: Iterable[int] = tqdm(
+            pbar: range | tqdm[int] = tqdm(
                 range(0, len(texts), batch_size),
                 total=int(len(texts) / batch_size),
             )
@@ -103,13 +103,13 @@ class GenerativeModel:
 
 class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
 
-    def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, device="cuda"):
+    def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, device="cuda", cache_size=100000):
         super().__init__(model, tokenizer, device)
 
         self.bos = self.tokenizer.bos_token or ""
         self.eos = self.tokenizer.eos_token or ""
 
-        self._cache: dict[str, str] = dict()
+        self._cache: LRUCache = LRUCache(maxsize=cache_size)
 
     def preproc(self, texts):
         return [self.bos + text + self.eos for text in texts]
