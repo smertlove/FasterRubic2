@@ -123,6 +123,9 @@ class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
     def get_from_global_cache(self, key: str):
         return self._cache.get(key)
 
+    def clear_cache(self):
+        self._cache.clear()
+
     def _exec_model_predict(
         self,
         batch: list[str],
