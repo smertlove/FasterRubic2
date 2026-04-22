@@ -7,6 +7,11 @@ from tqdm import tqdm
 import math
 import torch
 
+from typing import Callable
+
+
+Heuristic = Callable[[str], str | None]
+
 
 class GenerativeModel:
 
@@ -64,7 +69,7 @@ class GenerativeModel:
         if verbose:
             pbar: range | tqdm[int] = tqdm(
                 range(0, len(texts), batch_size),
-                total=int(len(texts) / batch_size),
+                total=math.ceil(len(texts) / batch_size),
             )
         else:
             pbar = range(0, len(texts), batch_size)
@@ -103,7 +108,14 @@ class GenerativeModel:
 
 class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
 
-    def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, device="cuda", cache_size=100000):
+    def __init__(
+        self,
+        model: PreTrainedModel,
+        tokenizer: PreTrainedTokenizer,
+        device="cuda",
+        cache_size=100000,
+        heuristics_stack: list[Heuristic]=list(),
+    ):
         super().__init__(model, tokenizer, device)
 
         self.bos = self.tokenizer.bos_token or ""
@@ -111,17 +123,37 @@ class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
 
         self._cache: LRUCache = LRUCache(maxsize=cache_size)
 
+        self.heuristics_stack = heuristics_stack
+
     def preproc(self, texts):
         return [self.bos + text + self.eos for text in texts]
 
     def postproc(self, texts):
         return ["".join(text.split()) for text in texts]
 
-    def populate_global_cache(self, key: str, val: str):
+    def add_to_global_cache(self, key: str, val: str):
         self._cache[key] = val
 
     def get_from_global_cache(self, key: str):
         return self._cache.get(key)
+
+    def apply_heuristics(self, inpt: str) -> str | None:
+        for heuristic in self.heuristics_stack:
+            heuristic_pred = heuristic(inpt)
+            if heuristic_pred is not None:
+                self.add_to_global_cache(inpt, heuristic_pred)
+                return heuristic_pred
+        return None
+
+    def fast_get_or_None(self, inpt: str) -> str | None:
+        for step in (
+            self.get_from_global_cache,
+            self.apply_heuristics,
+        ):
+            result = step(inpt)
+            if result is not None:
+                return result
+        return None
 
     def clear_cache(self):
         self._cache.clear()
@@ -147,7 +179,7 @@ class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
 
             # global cache might behave differently depending on implementation
             # so we populate it separately
-            self.populate_global_cache(inpt, pred)
+            self.add_to_global_cache(inpt, pred)
 
         return result
 
@@ -158,7 +190,7 @@ class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
         batch_size=32,
     ):
 
-        result = [self.get_from_global_cache(inpt) for inpt in batch]
+        result = [self.fast_get_or_None(inpt) for inpt in batch]
         pruned_batch = [inpt for inpt, res in zip(batch, result) if res is None]
 
         if pruned_batch:
@@ -202,3 +234,52 @@ class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
             result.extend(preds)
 
         return result
+
+
+def foreign_or_None(s: str):
+    if "Foreign:Yes" in s:
+        return s.split(maxsplit=1)[0].lower()
+    else:
+        return None
+
+def sing_nomn_noun_or_None(s: str):
+    if "NOUN" in s and "Case:Nom" in s and "Number:Sing" in s:
+        return s.split(maxsplit=1)[0].lower()
+    else:
+        return None
+
+def infn_verb_or_None(s: str):
+    if "VERB" in s and "VerbForm:Inf" in s:
+        return s.split(maxsplit=1)[0].lower()
+    else:
+        return None
+
+def punct_or_None(s: str):
+    if "PUNCT" in s:
+        return s.split(maxsplit=1)[0].lower()
+    else:
+        return None
+
+def sym_or_None(s: str):
+    if "SYM" in s:
+        return s.split(maxsplit=1)[0].lower()
+    else:
+        return None
+
+def num_anum_isalpha_or_None(s: str):
+    split = s.split(maxsplit=1)[0].lower()
+    if "NUM" in s and not split.isalpha():
+        return split
+    else:
+        return None
+
+
+# TODO: разобраться почему sing_nomn_noun_or_None и infn_verb_or_None просаживают качество
+heuristics = [
+    foreign_or_None,
+    # sing_nomn_noun_or_None,
+    # infn_verb_or_None,
+    punct_or_None,
+    sym_or_None,
+    num_anum_isalpha_or_None,
+]
