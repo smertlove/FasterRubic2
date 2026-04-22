@@ -5,6 +5,8 @@ from tqdm import tqdm
 import math
 import torch
 
+from typing import Iterable
+
 
 class GenerativeModel:
 
@@ -25,17 +27,17 @@ class GenerativeModel:
         """
         return texts
 
-    def postproc(self, texsts: list[str]):
+    def postproc(self, texts: list[str]):
         """
         Постобрабатывает гипотезы
         """
-        return texsts
+        return texts
 
     def predict(
         self,
         texts: list[str],
-        max_length: int = 32,
-        batch_size: int = 32,
+        max_length=32,
+        batch_size=32,
         verbose=True,
     ) -> list[str]:
 
@@ -60,7 +62,7 @@ class GenerativeModel:
         preds = []
 
         if verbose:
-            pbar = tqdm(
+            pbar: Iterable[int] = tqdm(
                 range(0, len(texts), batch_size),
                 total=int(len(texts) / batch_size),
             )
@@ -112,8 +114,8 @@ class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
     def preproc(self, texts):
         return [self.bos + text + self.eos for text in texts]
 
-    def postproc(self, texsts):
-        return ["".join(text.split()) for text in texsts]
+    def postproc(self, texts):
+        return ["".join(text.split()) for text in texts]
 
     def populate_global_cache(self, key: str, val: str):
         self._cache[key] = val
@@ -128,7 +130,7 @@ class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
         batch_size=32,
     ):
         uniq_inpts = list(set(batch))
-        preds = super().predict(
+        preds = self.predict(
             uniq_inpts, max_length=max_length, batch_size=batch_size, verbose=False
         )
 
@@ -171,28 +173,28 @@ class GenerativeModelWithCachingAndHeuristics(GenerativeModel):
 
         return result
 
-    def predict(
+    def predict_w_caching(
         self,
         inpts: list[str],
-        batch_size=64,
-        model_max_length=32,
-        model_batch_size=32,
+        max_length=32,
+        batch_size=32,
         verbose=True,
-    ):
+    ) -> list[str]:
         result = []
 
         ln = len(inpts)
+        bs = batch_size * 3
 
         if verbose:
-            tot = math.ceil(ln / batch_size)
-            pbar = tqdm(range(0, ln, batch_size), total=tot)
+            tot = math.ceil(ln / bs)
+            pbar: tqdm[int] | range = tqdm(range(0, ln, bs), total=tot)
         else:
-            pbar = range(0, ln, batch_size)
+            pbar = range(0, ln, bs)
 
         for i in pbar:
-            batch = inpts[i : i + batch_size]
+            batch = inpts[i : i + bs]
             preds = self._predict_batch(
-                batch, max_length=model_max_length, batch_size=model_batch_size
+                batch, max_length=max_length, batch_size=batch_size
             )
             result.extend(preds)
 
